@@ -1,0 +1,911 @@
+diff -crB v8-6.8.290/src/interpreter/bytecode-register.cc pkg10.17.0-modified/src/interpreter/bytecode-register.cc
+*** v8-6.8.290/src/interpreter/bytecode-register.cc	2018-05-24 10:29:56.000000000 +0300
+--- pkg10.17.0-modified/src/interpreter/bytecode-register.cc	2024-02-22 00:26:13.862319800 +0300
+***************
+*** 113,125 ****
+  
+  std::string Register::ToString(int parameter_count) const {
+    if (is_current_context()) {
+!     return std::string("<context>");
+    } else if (is_function_closure()) {
+!     return std::string("<closure>");
+    } else if (is_parameter()) {
+      int parameter_index = ToParameterIndex(parameter_count);
+      if (parameter_index == 0) {
+!       return std::string("<this>");
+      } else {
+        std::ostringstream s;
+        s << "a" << parameter_index - 1;
+--- 113,125 ----
+  
+  std::string Register::ToString(int parameter_count) const {
+    if (is_current_context()) {
+!     return std::string("<context/>");
+    } else if (is_function_closure()) {
+!     return std::string("<closure/>");
+    } else if (is_parameter()) {
+      int parameter_index = ToParameterIndex(parameter_count);
+      if (parameter_index == 0) {
+!       return std::string("<this/>");
+      } else {
+        std::ostringstream s;
+        s << "a" << parameter_index - 1;
+diff -crB v8-6.8.290/src/objects-printer.cc pkg10.17.0-modified/src/objects-printer.cc
+*** v8-6.8.290/src/objects-printer.cc	2018-05-24 10:29:56.000000000 +0300
+--- pkg10.17.0-modified/src/objects-printer.cc	2024-02-22 00:26:13.907184300 +0300
+***************
+*** 1359,1366 ****
+    os << "\n - expected_nof_properties: " << expected_nof_properties();
+    os << "\n - language_mode: " << language_mode();
+    os << "\n - data: " << Brief(function_data());
+    os << "\n - code (from data): " << Brief(GetCode());
+!   PrintSourceCode(os);
+    // Script files are often large, hard to read.
+    // os << "\n - script =";
+    // script()->Print(os);
+--- 1359,1382 ----
+    os << "\n - expected_nof_properties: " << expected_nof_properties();
+    os << "\n - language_mode: " << language_mode();
+    os << "\n - data: " << Brief(function_data());
++ 
++   //4 disassemble SharedFunctionInfo Bytecode array
++   os << "\n\n<disassembledSharedFunctionInfoBytecodearray>\n";
++ 
++   BytecodeArray* byteCodeArray = this->GetBytecodeArray();
++ 
++   byteCodeArray->Disassemble(os);
++   os << std::flush;
++ 
++   os << "</disassembledSharedFunctionInfoBytecodearray>\n";
++   //end
++ 
+    os << "\n - code (from data): " << Brief(GetCode());
+!   
+!   //5 disable source code print
+!   //PrintSourceCode(os);
+!   //end
+!   
+    // Script files are often large, hard to read.
+    // os << "\n - script =";
+    // script()->Print(os);
+diff -crB v8-6.8.290/src/objects.cc pkg10.17.0-modified/src/objects.cc
+*** v8-6.8.290/src/objects.cc	2018-05-24 10:29:56.000000000 +0300
+--- pkg10.17.0-modified/src/objects.cc	2024-02-22 00:26:14.096263000 +0300
+***************
+*** 2686,2697 ****
+  void String::StringShortPrint(StringStream* accumulator, bool show_details) {
+    int len = length();
+    if (len > kMaxShortPrintLength) {
+!     accumulator->Add("<Very long string[%u]>", len);
+      return;
+    }
+  
+    if (!LooksValid()) {
+!     accumulator->Add("<Invalid String>");
+      return;
+    }
+  
+--- 2686,2697 ----
+  void String::StringShortPrint(StringStream* accumulator, bool show_details) {
+    int len = length();
+    if (len > kMaxShortPrintLength) {
+!     accumulator->Add("<Very long string[%u]/>", len);
+      return;
+    }
+  
+    if (!LooksValid()) {
+!     accumulator->Add("<Invalid String/>");
+      return;
+    }
+  
+***************
+*** 2716,2722 ****
+      for (int i = 0; i < len; i++) {
+        accumulator->Put(static_cast<char>(stream.GetNext()));
+      }
+!     if (show_details) accumulator->Put('>');
+    } else {
+      // Backslash indicates that the string contains control
+      // characters and that backslashes are therefore escaped.
+--- 2716,2726 ----
+      for (int i = 0; i < len; i++) {
+        accumulator->Put(static_cast<char>(stream.GetNext()));
+      }
+!     if (show_details) {
+!       accumulator->Put(' ');
+!       accumulator->Put('/');
+!       accumulator->Put('>');
+!     }
+    } else {
+      // Backslash indicates that the string contains control
+      // characters and that backslashes are therefore escaped.
+***************
+*** 2740,2746 ****
+        accumulator->Put('.');
+        accumulator->Put('.');
+      }
+!     if (show_details) accumulator->Put('>');
+    }
+    return;
+  }
+--- 2744,2754 ----
+        accumulator->Put('.');
+        accumulator->Put('.');
+      }
+!     if (show_details) {
+!       accumulator->Put(' ');
+!       accumulator->Put('/');
+!       accumulator->Put('>');
+!     }
+    }
+    return;
+  }
+***************
+*** 2754,2783 ****
+    }
+  }
+  
+- 
+  void JSObject::JSObjectShortPrint(StringStream* accumulator) {
+    switch (map()->instance_type()) {
+      case JS_ARRAY_TYPE: {
+        double length = JSArray::cast(this)->length()->IsUndefined(GetIsolate())
+                            ? 0
+                            : JSArray::cast(this)->length()->Number();
+!       accumulator->Add("<JSArray[%u]>", static_cast<uint32_t>(length));
+        break;
+      }
+      case JS_BOUND_FUNCTION_TYPE: {
+        JSBoundFunction* bound_function = JSBoundFunction::cast(this);
+        accumulator->Add("<JSBoundFunction");
+        accumulator->Add(
+!           " (BoundTargetFunction %p)>",
+            reinterpret_cast<void*>(bound_function->bound_target_function()));
+        break;
+      }
+      case JS_WEAK_MAP_TYPE: {
+!       accumulator->Add("<JSWeakMap>");
+        break;
+      }
+      case JS_WEAK_SET_TYPE: {
+!       accumulator->Add("<JSWeakSet>");
+        break;
+      }
+      case JS_REGEXP_TYPE: {
+--- 2762,2790 ----
+    }
+  }
+  
+  void JSObject::JSObjectShortPrint(StringStream* accumulator) {
+    switch (map()->instance_type()) {
+      case JS_ARRAY_TYPE: {
+        double length = JSArray::cast(this)->length()->IsUndefined(GetIsolate())
+                            ? 0
+                            : JSArray::cast(this)->length()->Number();
+!       accumulator->Add("<JSArray[%u] />", static_cast<uint32_t>(length));
+        break;
+      }
+      case JS_BOUND_FUNCTION_TYPE: {
+        JSBoundFunction* bound_function = JSBoundFunction::cast(this);
+        accumulator->Add("<JSBoundFunction");
+        accumulator->Add(
+!           " (BoundTargetFunction %p) />",
+            reinterpret_cast<void*>(bound_function->bound_target_function()));
+        break;
+      }
+      case JS_WEAK_MAP_TYPE: {
+!       accumulator->Add("<JSWeakMap/>");
+        break;
+      }
+      case JS_WEAK_SET_TYPE: {
+!       accumulator->Add("<JSWeakSet/>");
+        break;
+      }
+      case JS_REGEXP_TYPE: {
+***************
+*** 2787,2793 ****
+          accumulator->Add(" ");
+          String::cast(regexp->source())->StringShortPrint(accumulator);
+        }
+!       accumulator->Add(">");
+  
+        break;
+      }
+--- 2794,2800 ----
+          accumulator->Add(" ");
+          String::cast(regexp->source())->StringShortPrint(accumulator);
+        }
+!       accumulator->Add(" />");
+  
+        break;
+      }
+***************
+*** 2814,2834 ****
+            if (str->length() > 0) {
+              accumulator->Add(" <");
+              accumulator->Put(str);
+!             accumulator->Add(">");
+            }
+          }
+        }
+        accumulator->Add(" (sfi = %p)",
+                         reinterpret_cast<void*>(function->shared()));
+        accumulator->Put('>');
+        break;
+      }
+      case JS_GENERATOR_OBJECT_TYPE: {
+!       accumulator->Add("<JSGenerator>");
+        break;
+      }
+      case JS_ASYNC_GENERATOR_OBJECT_TYPE: {
+!       accumulator->Add("<JS AsyncGenerator>");
+        break;
+      }
+  
+--- 2821,2843 ----
+            if (str->length() > 0) {
+              accumulator->Add(" <");
+              accumulator->Put(str);
+!             accumulator->Add(" />");
+            }
+          }
+        }
+        accumulator->Add(" (sfi = %p)",
+                         reinterpret_cast<void*>(function->shared()));
++       accumulator->Put(' ');
++       accumulator->Put('/');
+        accumulator->Put('>');
+        break;
+      }
+      case JS_GENERATOR_OBJECT_TYPE: {
+!       accumulator->Add("<JSGenerator/>");
+        break;
+      }
+      case JS_ASYNC_GENERATOR_OBJECT_TYPE: {
+!       accumulator->Add("<JS AsyncGenerator />");
+        break;
+      }
+  
+***************
+*** 2861,2867 ****
+              }
+            }
+          } else if (constructor->IsFunctionTemplateInfo()) {
+!           accumulator->Add(global_object ? "<RemoteObject>" : "<RemoteObject>");
+            printed = true;
+          }
+          if (!printed) {
+--- 2870,2877 ----
+              }
+            }
+          } else if (constructor->IsFunctionTemplateInfo()) {
+!           accumulator->Add(global_object ? "<RemoteObject/>"
+!                                          : "<RemoteObject/>");
+            printed = true;
+          }
+          if (!printed) {
+***************
+*** 2872,2888 ****
+          accumulator->Add(" value = ");
+          JSValue::cast(this)->value()->ShortPrint(accumulator);
+        }
+        accumulator->Put('>');
+        break;
+      }
+    }
+  }
+  
+! 
+! void JSObject::PrintElementsTransition(
+!     FILE* file, Handle<JSObject> object,
+!     ElementsKind from_kind, Handle<FixedArrayBase> from_elements,
+!     ElementsKind to_kind, Handle<FixedArrayBase> to_elements) {
+    if (from_kind != to_kind) {
+      OFStream os(file);
+      os << "elements transition [" << ElementsKindToString(from_kind) << " -> "
+--- 2882,2900 ----
+          accumulator->Add(" value = ");
+          JSValue::cast(this)->value()->ShortPrint(accumulator);
+        }
++       accumulator->Put(' ');
++       accumulator->Put('/');
+        accumulator->Put('>');
+        break;
+      }
+    }
+  }
+  
+! void JSObject::PrintElementsTransition(FILE* file, Handle<JSObject> object,
+!                                        ElementsKind from_kind,
+!                                        Handle<FixedArrayBase> from_elements,
+!                                        ElementsKind to_kind,
+!                                        Handle<FixedArrayBase> to_elements) {
+    if (from_kind != to_kind) {
+      OFStream os(file);
+      os << "elements transition [" << ElementsKindToString(from_kind) << " -> "
+***************
+*** 3273,3338 ****
+        } else if (mapInstance->instance_size() != kVariableSizeSentinel) {
+          os << "[" << mapInstance->instance_size() << "]";
+        }
+!       os << ">";
+      } break;
+      case BLOCK_CONTEXT_TYPE:
+!       os << "<BlockContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case CATCH_CONTEXT_TYPE:
+!       os << "<CatchContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case DEBUG_EVALUATE_CONTEXT_TYPE:
+        os << "<DebugEvaluateContext[" << FixedArray::cast(this)->length()
+!          << "]>";
+        break;
+      case EVAL_CONTEXT_TYPE:
+!       os << "<EvalContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case FUNCTION_CONTEXT_TYPE:
+!       os << "<FunctionContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case MODULE_CONTEXT_TYPE:
+!       os << "<ModuleContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case NATIVE_CONTEXT_TYPE:
+!       os << "<NativeContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case SCRIPT_CONTEXT_TYPE:
+!       os << "<ScriptContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case WITH_CONTEXT_TYPE:
+!       os << "<WithContext[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case HASH_TABLE_TYPE:
+!       os << "<HashTable[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case FIXED_ARRAY_TYPE:
+!       os << "<FixedArray[" << FixedArray::cast(this)->length() << "]>";
+        break;
+      case BOILERPLATE_DESCRIPTION_TYPE:
+        os << "<BoilerplateDescription[" << FixedArray::cast(this)->length()
+!          << "]>";
+        break;
+      case FIXED_DOUBLE_ARRAY_TYPE:
+        os << "<FixedDoubleArray[" << FixedDoubleArray::cast(this)->length()
+!          << "]>";
+        break;
+      case BYTE_ARRAY_TYPE:
+!       os << "<ByteArray[" << ByteArray::cast(this)->length() << "]>";
+        break;
+      case BYTECODE_ARRAY_TYPE:
+!       os << "<BytecodeArray[" << BytecodeArray::cast(this)->length() << "]>";
+        break;
+      case DESCRIPTOR_ARRAY_TYPE:
+        os << "<DescriptorArray[" << DescriptorArray::cast(this)->length()
+!          << "]>";
+        break;
+      case TRANSITION_ARRAY_TYPE:
+        os << "<TransitionArray[" << TransitionArray::cast(this)->length()
+!          << "]>";
+        break;
+      case PROPERTY_ARRAY_TYPE:
+!       os << "<PropertyArray[" << PropertyArray::cast(this)->length() << "]>";
+        break;
+      case FEEDBACK_CELL_TYPE: {
+        os << "<FeedbackCell[";
+--- 3285,3356 ----
+        } else if (mapInstance->instance_size() != kVariableSizeSentinel) {
+          os << "[" << mapInstance->instance_size() << "]";
+        }
+!       os << " />";
+      } break;
+      case BLOCK_CONTEXT_TYPE:
+!       os << "<BlockContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case CATCH_CONTEXT_TYPE:
+!       os << "<CatchContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case DEBUG_EVALUATE_CONTEXT_TYPE:
+        os << "<DebugEvaluateContext[" << FixedArray::cast(this)->length()
+!          << "]/>";
+        break;
+      case EVAL_CONTEXT_TYPE:
+!       os << "<EvalContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case FUNCTION_CONTEXT_TYPE:
+!       os << "<FunctionContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case MODULE_CONTEXT_TYPE:
+!       os << "<ModuleContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case NATIVE_CONTEXT_TYPE:
+!       os << "<NativeContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case SCRIPT_CONTEXT_TYPE:
+!       os << "<ScriptContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case WITH_CONTEXT_TYPE:
+!       os << "<WithContext[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case HASH_TABLE_TYPE:
+!       os << "<HashTable[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case FIXED_ARRAY_TYPE:
+!       os << "<FixedArray[" << FixedArray::cast(this)->length() << "] />";
+        break;
+      case BOILERPLATE_DESCRIPTION_TYPE:
+        os << "<BoilerplateDescription[" << FixedArray::cast(this)->length()
+!          << "] />";
+! 
+!       // 5 print BoilerplateDescription
+!       os << "\n\n<detailedBoilerplateDescription>\n";
+!       BoilerplateDescription::cast(this)->BoilerplateDescriptionPrint(os);
+!       os << "</detailedBoilerplateDescription>\n";
+!       // end
+        break;
+      case FIXED_DOUBLE_ARRAY_TYPE:
+        os << "<FixedDoubleArray[" << FixedDoubleArray::cast(this)->length()
+!          << "] />";
+        break;
+      case BYTE_ARRAY_TYPE:
+!       os << "<ByteArray[" << ByteArray::cast(this)->length() << "] />";
+        break;
+      case BYTECODE_ARRAY_TYPE:
+!       os << "<BytecodeArray[" << BytecodeArray::cast(this)->length() << "] />";
+        break;
+      case DESCRIPTOR_ARRAY_TYPE:
+        os << "<DescriptorArray[" << DescriptorArray::cast(this)->length()
+!          << "] />";
+        break;
+      case TRANSITION_ARRAY_TYPE:
+        os << "<TransitionArray[" << TransitionArray::cast(this)->length()
+!          << "] />";
+        break;
+      case PROPERTY_ARRAY_TYPE:
+!       os << "<PropertyArray[" << PropertyArray::cast(this)->length() << "] />";
+        break;
+      case FEEDBACK_CELL_TYPE: {
+        os << "<FeedbackCell[";
+***************
+*** 3345,3386 ****
+        } else {
+          os << "!!!INVALID MAP!!!";
+        }
+!       os << "]>";
+        break;
+      }
+      case FEEDBACK_VECTOR_TYPE:
+!       os << "<FeedbackVector[" << FeedbackVector::cast(this)->length() << "]>";
+        break;
+      case FREE_SPACE_TYPE:
+!       os << "<FreeSpace[" << FreeSpace::cast(this)->size() << "]>";
+        break;
+  #define TYPED_ARRAY_SHORT_PRINT(Type, type, TYPE, ctype, size)                \
+    case FIXED_##TYPE##_ARRAY_TYPE:                                             \
+      os << "<Fixed" #Type "Array[" << Fixed##Type##Array::cast(this)->length() \
+!        << "]>";                                                               \
+      break;
+  
+!     TYPED_ARRAYS(TYPED_ARRAY_SHORT_PRINT)
+  #undef TYPED_ARRAY_SHORT_PRINT
+  
+      case SHARED_FUNCTION_INFO_TYPE: {
+        SharedFunctionInfo* shared = SharedFunctionInfo::cast(this);
+        std::unique_ptr<char[]> debug_name = shared->DebugName()->ToCString();
+        if (debug_name[0] != 0) {
+!         os << "<SharedFunctionInfo " << debug_name.get() << ">";
+        } else {
+!         os << "<SharedFunctionInfo>";
+        }
+        break;
+      }
+      case JS_MESSAGE_OBJECT_TYPE:
+!       os << "<JSMessageObject>";
+        break;
+  #define MAKE_STRUCT_CASE(NAME, Name, name)   \
+    case NAME##_TYPE:                          \
+      os << "<" #Name;                         \
+      Name::cast(this)->BriefPrintDetails(os); \
+!     os << ">";                               \
+      break;
+        STRUCT_LIST(MAKE_STRUCT_CASE)
+  #undef MAKE_STRUCT_CASE
+--- 3363,3411 ----
+        } else {
+          os << "!!!INVALID MAP!!!";
+        }
+!       os << "] />";
+        break;
+      }
+      case FEEDBACK_VECTOR_TYPE:
+!       os << "<FeedbackVector[" << FeedbackVector::cast(this)->length() << "] />";
+        break;
+      case FREE_SPACE_TYPE:
+!       os << "<FreeSpace[" << FreeSpace::cast(this)->size() << "] />";
+        break;
+  #define TYPED_ARRAY_SHORT_PRINT(Type, type, TYPE, ctype, size)                \
+    case FIXED_##TYPE##_ARRAY_TYPE:                                             \
+      os << "<Fixed" #Type "Array[" << Fixed##Type##Array::cast(this)->length() \
+!        << "] />";                                                              \
+      break;
+  
+!       TYPED_ARRAYS(TYPED_ARRAY_SHORT_PRINT)
+  #undef TYPED_ARRAY_SHORT_PRINT
+  
+      case SHARED_FUNCTION_INFO_TYPE: {
+        SharedFunctionInfo* shared = SharedFunctionInfo::cast(this);
+        std::unique_ptr<char[]> debug_name = shared->DebugName()->ToCString();
+        if (debug_name[0] != 0) {
+!         os << "<SharedFunctionInfo " << debug_name.get() << " />";
+        } else {
+!         os << "<SharedFunctionInfo />";
+        }
++ 
++       // 3 print SharedFunctionInfo
++       os << "\n<detailedSharedFunctionInfo>\n";
++       shared->SharedFunctionInfoPrint(os);
++       os << "</detailedSharedFunctionInfo>\n";
++       // end
++ 
+        break;
+      }
+      case JS_MESSAGE_OBJECT_TYPE:
+!       os << "<JSMessageObject />";
+        break;
+  #define MAKE_STRUCT_CASE(NAME, Name, name)   \
+    case NAME##_TYPE:                          \
+      os << "<" #Name;                         \
+      Name::cast(this)->BriefPrintDetails(os); \
+!     os << " />";                              \
+      break;
+        STRUCT_LIST(MAKE_STRUCT_CASE)
+  #undef MAKE_STRUCT_CASE
+***************
+*** 3388,3394 ****
+        ScopeInfo* scope = ScopeInfo::cast(this);
+        os << "<ScopeInfo";
+        if (scope->length()) os << " " << scope->scope_type() << " ";
+!       os << "[" << scope->length() << "]>";
+        break;
+      }
+      case CODE_TYPE: {
+--- 3413,3419 ----
+        ScopeInfo* scope = ScopeInfo::cast(this);
+        os << "<ScopeInfo";
+        if (scope->length()) os << " " << scope->scope_type() << " ";
+!       os << "[" << scope->length() << "] />";
+        break;
+      }
+      case CODE_TYPE: {
+***************
+*** 3399,3422 ****
+        } else if (code->is_builtin()) {
+          os << " " << Builtins::name(code->builtin_index());
+        }
+!       os << ">";
+        break;
+      }
+      case ODDBALL_TYPE: {
+        if (IsUndefined(isolate)) {
+!         os << "<undefined>";
+        } else if (IsTheHole(isolate)) {
+!         os << "<the_hole>";
+        } else if (IsNull(isolate)) {
+!         os << "<null>";
+        } else if (IsTrue(isolate)) {
+!         os << "<true>";
+        } else if (IsFalse(isolate)) {
+!         os << "<false>";
+        } else {
+          os << "<Odd Oddball: ";
+          os << Oddball::cast(this)->to_string()->ToCString().get();
+!         os << ">";
+        }
+        break;
+      }
+--- 3424,3447 ----
+        } else if (code->is_builtin()) {
+          os << " " << Builtins::name(code->builtin_index());
+        }
+!       os << " />";
+        break;
+      }
+      case ODDBALL_TYPE: {
+        if (IsUndefined(isolate)) {
+!         os << "<undefined/>";
+        } else if (IsTheHole(isolate)) {
+!         os << "<the_hole/>";
+        } else if (IsNull(isolate)) {
+!         os << "<null/>";
+        } else if (IsTrue(isolate)) {
+!         os << "<true/>";
+        } else if (IsFalse(isolate)) {
+!         os << "<false/>";
+        } else {
+          os << "<Odd Oddball: ";
+          os << Oddball::cast(this)->to_string()->ToCString().get();
+!         os << " />";
+        }
+        break;
+      }
+***************
+*** 3428,3453 ****
+      case HEAP_NUMBER_TYPE: {
+        os << "<Number ";
+        HeapNumber::cast(this)->HeapNumberPrint(os);
+!       os << ">";
+        break;
+      }
+      case MUTABLE_HEAP_NUMBER_TYPE: {
+        os << "<MutableNumber ";
+        HeapNumber::cast(this)->HeapNumberPrint(os);
+!       os << '>';
+        break;
+      }
+      case BIGINT_TYPE: {
+        os << "<BigInt ";
+        BigInt::cast(this)->BigIntShortPrint(os);
+!       os << ">";
+        break;
+      }
+      case JS_PROXY_TYPE:
+!       os << "<JSProxy>";
+        break;
+      case FOREIGN_TYPE:
+!       os << "<Foreign>";
+        break;
+      case CELL_TYPE: {
+        os << "<Cell value= ";
+--- 3453,3478 ----
+      case HEAP_NUMBER_TYPE: {
+        os << "<Number ";
+        HeapNumber::cast(this)->HeapNumberPrint(os);
+!       os << " />";
+        break;
+      }
+      case MUTABLE_HEAP_NUMBER_TYPE: {
+        os << "<MutableNumber ";
+        HeapNumber::cast(this)->HeapNumberPrint(os);
+!       os << ' />';
+        break;
+      }
+      case BIGINT_TYPE: {
+        os << "<BigInt ";
+        BigInt::cast(this)->BigIntShortPrint(os);
+!       os << " />";
+        break;
+      }
+      case JS_PROXY_TYPE:
+!       os << "<JSProxy/>";
+        break;
+      case FOREIGN_TYPE:
+!       os << "<Foreign/>";
+        break;
+      case CELL_TYPE: {
+        os << "<Cell value= ";
+***************
+*** 3455,3461 ****
+        StringStream accumulator(&allocator);
+        Cell::cast(this)->value()->ShortPrint(&accumulator);
+        os << accumulator.ToCString().get();
+!       os << '>';
+        break;
+      }
+      case PROPERTY_CELL_TYPE: {
+--- 3480,3486 ----
+        StringStream accumulator(&allocator);
+        Cell::cast(this)->value()->ShortPrint(&accumulator);
+        os << accumulator.ToCString().get();
+!       os << ' />';
+        break;
+      }
+      case PROPERTY_CELL_TYPE: {
+***************
+*** 3467,3473 ****
+        StringStream accumulator(&allocator);
+        cell->value()->ShortPrint(&accumulator);
+        os << accumulator.ToCString().get();
+!       os << '>';
+        break;
+      }
+      case WEAK_CELL_TYPE: {
+--- 3492,3498 ----
+        StringStream accumulator(&allocator);
+        cell->value()->ShortPrint(&accumulator);
+        os << accumulator.ToCString().get();
+!       os << ' />';
+        break;
+      }
+      case WEAK_CELL_TYPE: {
+***************
+*** 3476,3482 ****
+        StringStream accumulator(&allocator);
+        WeakCell::cast(this)->value()->ShortPrint(&accumulator);
+        os << accumulator.ToCString().get();
+!       os << '>';
+        break;
+      }
+      case CALL_HANDLER_INFO_TYPE: {
+--- 3501,3507 ----
+        StringStream accumulator(&allocator);
+        WeakCell::cast(this)->value()->ShortPrint(&accumulator);
+        os << accumulator.ToCString().get();
+!       os << ' />';
+        break;
+      }
+      case CALL_HANDLER_INFO_TYPE: {
+***************
+*** 3486,3499 ****
+        os << ", js_callback= " << Brief(info->js_callback());
+        os << ", data= " << Brief(info->data());
+        if (info->IsSideEffectFreeCallHandlerInfo()) {
+!         os << ", side_effect_free= true>";
+        } else {
+!         os << ", side_effect_free= false>";
+        }
+        break;
+      }
+      default:
+!       os << "<Other heap object (" << map()->instance_type() << ")>";
+        break;
+    }
+  }
+--- 3511,3524 ----
+        os << ", js_callback= " << Brief(info->js_callback());
+        os << ", data= " << Brief(info->data());
+        if (info->IsSideEffectFreeCallHandlerInfo()) {
+!         os << ", side_effect_free= true />";
+        } else {
+!         os << ", side_effect_free= false />";
+        }
+        break;
+      }
+      default:
+!       os << "<Other heap object (" << map()->instance_type() << ") />";
+        break;
+    }
+  }
+***************
+*** 13183,13188 ****
+--- 13208,13216 ----
+    Handle<Object> maybe_class_positions = JSReceiver::GetDataProperty(
+        function, isolate->factory()->class_positions_symbol());
+    if (maybe_class_positions->IsTuple2()) {
++     if (Script::cast(shared_info->script())->source()->IsUndefined(isolate)) {
++       return isolate->factory()->NewStringFromAsciiChecked("class {}");
++     }
+      Tuple2* class_positions = Tuple2::cast(*maybe_class_positions);
+      int start_position = Smi::ToInt(class_positions->value1());
+      int end_position = Smi::ToInt(class_positions->value2());
+diff -crB v8-6.8.290/src/objects.h pkg10.17.0-modified/src/objects.h
+*** v8-6.8.290/src/objects.h	2018-05-24 10:29:56.000000000 +0300
+--- pkg10.17.0-modified/src/objects.h	2024-02-22 00:26:14.158263400 +0300
+***************
+*** 2,7 ****
+--- 2,11 ----
+  // Use of this source code is governed by a BSD-style license that can be
+  // found in the LICENSE file.
+  
++ //2 print constant pool
++ #define OBJECT_PRINT 1
++ //end
++ 
+  #ifndef V8_OBJECTS_H_
+  #define V8_OBJECTS_H_
+  
+diff -crB v8-6.8.290/src/snapshot/code-serializer.cc pkg10.17.0-modified/src/snapshot/code-serializer.cc
+*** v8-6.8.290/src/snapshot/code-serializer.cc	2018-05-24 10:29:56.000000000 +0300
+--- pkg10.17.0-modified/src/snapshot/code-serializer.cc	2024-02-22 00:26:14.182262300 +0300
+***************
+*** 281,293 ****
+      return MaybeHandle<SharedFunctionInfo>();
+    }
+  
+    if (FLAG_profile_deserialization) {
+      double ms = timer.Elapsed().InMillisecondsF();
+      int length = cached_data->length();
+      PrintF("[Deserializing from %d bytes took %0.3f ms]\n", length, ms);
+    }
+  
+!   if (isolate->logger()->is_logging_code_events() || isolate->is_profiling()) {
+      String* name = isolate->heap()->empty_string();
+      if (result->script()->IsScript()) {
+        Script* script = Script::cast(result->script());
+--- 281,305 ----
+      return MaybeHandle<SharedFunctionInfo>();
+    }
+  
++   //1 disassemble jsc and print its bytecode
++   BytecodeArray* byteCodeArray = result->GetBytecodeArray();
++ 
++   PrintF("----------start disassemble jsc----------\n");
++ 
++   OFStream os(stdout);
++   byteCodeArray->Disassemble(os);
++   os << std::flush;
++    
++   //end
++   
+    if (FLAG_profile_deserialization) {
+      double ms = timer.Elapsed().InMillisecondsF();
+      int length = cached_data->length();
+      PrintF("[Deserializing from %d bytes took %0.3f ms]\n", length, ms);
+    }
+  
+!   if (isolate->logger()->is_listening_to_code_events() ||
+!       isolate->is_profiling()) {
+      String* name = isolate->heap()->empty_string();
+      if (result->script()->IsScript()) {
+        Script* script = Script::cast(result->script());
+***************
+*** 402,408 ****
+      Isolate* isolate, uint32_t expected_source_hash) const {
+    if (this->size_ < kHeaderSize) return INVALID_HEADER;
+    uint32_t magic_number = GetMagicNumber();
+!   if (magic_number != ComputeMagicNumber(isolate)) return MAGIC_NUMBER_MISMATCH;
+    uint32_t version_hash = GetHeaderValue(kVersionHashOffset);
+    uint32_t source_hash = GetHeaderValue(kSourceHashOffset);
+    uint32_t cpu_features = GetHeaderValue(kCpuFeaturesOffset);
+--- 414,423 ----
+      Isolate* isolate, uint32_t expected_source_hash) const {
+    if (this->size_ < kHeaderSize) return INVALID_HEADER;
+    uint32_t magic_number = GetMagicNumber();
+!   if (magic_number != ComputeMagicNumber(isolate)) {
+!     // base::OS::PrintError("Pkg: MAGIC_NUMBER_MISMATCH\n"); // TODO enable after solving v8-cache/ncc issue
+!     return MAGIC_NUMBER_MISMATCH;
+!   }
+    uint32_t version_hash = GetHeaderValue(kVersionHashOffset);
+    uint32_t source_hash = GetHeaderValue(kSourceHashOffset);
+    uint32_t cpu_features = GetHeaderValue(kCpuFeaturesOffset);
+***************
+*** 410,428 ****
+    uint32_t payload_length = GetHeaderValue(kPayloadLengthOffset);
+    uint32_t c1 = GetHeaderValue(kChecksum1Offset);
+    uint32_t c2 = GetHeaderValue(kChecksum2Offset);
+!   if (version_hash != Version::Hash()) return VERSION_MISMATCH;
+!   if (source_hash != expected_source_hash) return SOURCE_MISMATCH;
+!   if (cpu_features != static_cast<uint32_t>(CpuFeatures::SupportedFeatures())) {
+      return CPU_FEATURES_MISMATCH;
+    }
+!   if (flags_hash != FlagList::Hash()) return FLAGS_MISMATCH;
+    uint32_t max_payload_length =
+        this->size_ -
+        POINTER_SIZE_ALIGN(kHeaderSize +
+                           GetHeaderValue(kNumReservationsOffset) * kInt32Size +
+                           GetHeaderValue(kNumCodeStubKeysOffset) * kInt32Size);
+!   if (payload_length > max_payload_length) return LENGTH_MISMATCH;
+!   if (!Checksum(DataWithoutHeader()).Check(c1, c2)) return CHECKSUM_MISMATCH;
+    return CHECK_SUCCESS;
+  }
+  
+--- 425,456 ----
+    uint32_t payload_length = GetHeaderValue(kPayloadLengthOffset);
+    uint32_t c1 = GetHeaderValue(kChecksum1Offset);
+    uint32_t c2 = GetHeaderValue(kChecksum2Offset);
+!   if (version_hash != Version::Hash()) {
+!     base::OS::PrintError("Pkg: VERSION_MISMATCH\n");
+!     return VERSION_MISMATCH;
+!   }
+!   uint32_t host_features = static_cast<uint32_t>(CpuFeatures::SupportedFeatures());
+!   if (cpu_features & (~host_features)) {
+!     base::OS::PrintError("Pkg: CPU_FEATURES_MISMATCH\n");
+      return CPU_FEATURES_MISMATCH;
+    }
+!   if (flags_hash != FlagList::Hash()) {
+!     base::OS::PrintError("Pkg: FLAGS_MISMATCH\n");
+!     return FLAGS_MISMATCH;
+!   }
+    uint32_t max_payload_length =
+        this->size_ -
+        POINTER_SIZE_ALIGN(kHeaderSize +
+                           GetHeaderValue(kNumReservationsOffset) * kInt32Size +
+                           GetHeaderValue(kNumCodeStubKeysOffset) * kInt32Size);
+!   if (payload_length > max_payload_length) {
+!     base::OS::PrintError("Pkg: LENGTH_MISMATCH\n");
+!     return LENGTH_MISMATCH;
+!   }
+!   if (!Checksum(DataWithoutHeader()).Check(c1, c2)) {
+!     base::OS::PrintError("Pkg: CHECKSUM_MISMATCH\n");
+!     return CHECKSUM_MISMATCH;
+!   }
+    return CHECK_SUCCESS;
+  }
+  
